@@ -1,0 +1,35 @@
+<div class="app-layout">
+  <header>
+    <h1>M3D TFLite Trainer</h1>
+    <span class="subtitle">Train &rarr; ESP32</span>
+  </header>
+
+  <div class="main-content">
+    <div class="left-column">
+      <app-camera-preview></app-camera-preview>
+
+      <div class="classes-section">
+        @for (cls of classes; track cls.id) {
+          <app-class-panel
+            [classData]="cls"
+            (samplesChanged)="0"
+            (removeClass)="removeClass($event)">
+          </app-class-panel>
+        }
+        <button class="add-class-btn" (click)="addClass()">+ Add Class</button>
+      </div>
+    </div>
+
+    <div class="right-column">
+      <app-training-controls
+        [canTrain]="canTrain"
+        (onTrain)="train($event)">
+      </app-training-controls>
+
+      @if (trainerService.isTrained()) {
+        <app-prediction-panel></app-prediction-panel>
+        <app-export-panel></app-export-panel>
+      }
+    </div>
+  </div>
+</div>

@@ -122,8 +122,6 @@ export class PredictionPanelComponent implements OnInit, OnDestroy {
         console.error('Prediction loop error:', e);
       }
     }
-    requestAnimationFrame(() => {
-      setTimeout(() => this.runLoop(), 80);
-    });
+    setTimeout(() => this.runLoop(), 500);
   }
 }
