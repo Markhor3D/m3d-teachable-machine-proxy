@@ -1,0 +1,11 @@
+{
+  "imageSize": 48,
+  "baseModel": "mobilenet_v1_0.25_224",
+  "truncationLayer": "conv_pw_13_relu",
+  "labels": [
+    "Window",
+    "Ceiling"
+  ],
+  "modelName": "m3d-model",
+  "timeStamp": "2026-10-01T10:47:43.186Z"
+}

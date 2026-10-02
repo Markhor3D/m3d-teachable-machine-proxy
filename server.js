@@ -6,11 +6,12 @@ const app = express();
 
 const TARGET_DOMAIN = 'teachablemachine.withgoogle.com';
 const TARGET_URL = `https://${TARGET_DOMAIN}`;
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const INJECTION_FILE_PATH = path.join(__dirname, 'injection.js');
 
 app.use(express.static(__dirname));
 app.use('/', proxy(TARGET_URL, {
+    limit: '100mb',
     
     // 1. Intercept Response
     userResDecorator: (proxyRes, proxyResData, userReq, userRes) => {

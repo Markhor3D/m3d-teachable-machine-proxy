@@ -9,9 +9,14 @@
 
     // --- STATE ---
     let m3dAvailable = false;
-    let userChoice = null; 
+    let userChoice = null;
     let mjpegStream = null;
     let drawLoopActive = false;
+    let pollInterval = 0;
+
+    document.addEventListener("visibilitychange", () => {
+        pollInterval = document.hidden ? 1000 : 0;
+    });
 
     // --- 1. CSS STYLES ---
     const styles = `
@@ -159,30 +164,68 @@
     }
 
     // --- 3. MJPEG LOGIC ---
-    async function getCanvasBasedMJPEGStream(mjpegUrl) {
-        if (mjpegStream && drawLoopActive) return mjpegStream; 
+    let m3dCanvas = null;
+    let lastDrawTime = Date.now();
+    let frameCount = 0;
+
+    function ensureDrawLoop(mjpegUrl) {
+        console.log('[M3D ensureDrawLoop] drawLoopActive:', drawLoopActive, 'canvas:', !!m3dCanvas);
+        if (drawLoopActive) {
+            console.log('[M3D ensureDrawLoop] Draw loop already running, skipping');
+            return;
+        }
         drawLoopActive = true;
-        const canvas = document.createElement('canvas');
-        canvas.width = 480; canvas.height = 360;
-        const ctx = canvas.getContext('2d');
-        
+        pollInterval = 0;
+
+        if (!m3dCanvas) {
+            m3dCanvas = document.createElement('canvas');
+            m3dCanvas.width = 480; m3dCanvas.height = 360;
+        }
+        const ctx = m3dCanvas.getContext('2d');
+        lastDrawTime = Date.now();
+        frameCount = 0;
+
         async function drawLoop() {
             if (!drawLoopActive) return;
             try {
-                const response = await fetch(mjpegUrl + '?t=' + Date.now()); 
+                const response = await fetch(mjpegUrl + '?t=' + Date.now());
                 const imgBlob = await response.blob();
                 const img = await createImageBitmap(imgBlob);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.save(); ctx.scale(-1, 1); 
-                ctx.drawImage(img, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.clearRect(0, 0, m3dCanvas.width, m3dCanvas.height);
+                ctx.save(); ctx.scale(-1, 1);
+                ctx.drawImage(img, -m3dCanvas.width, 0, m3dCanvas.width, m3dCanvas.height);
                 ctx.restore();
-                setTimeout(drawLoop, 40); 
-            } catch (err) { setTimeout(drawLoop, 100); }
+
+                frameCount++;
+                const now = Date.now();
+                if (now - lastDrawTime >= 1000) {
+                    console.log('M3D canvas draw fps:', frameCount);
+                    lastDrawTime = now;
+                    frameCount = 0;
+                }
+
+                setTimeout(drawLoop, 20 + pollInterval);
+            } catch (err) {
+                console.warn('M3D frame fetch failed, retrying...', err);
+                setTimeout(drawLoop, 100);
+            }
         }
         drawLoop();
-        mjpegStream = canvas.captureStream(25);
-        mjpegStream.getVideoTracks()[0].onended = () => { drawLoopActive = false; mjpegStream = null; };
-        return mjpegStream;
+    }
+
+    function stopM3DStream() {
+        drawLoopActive = false;
+        if (mjpegStream) {
+            mjpegStream.getTracks().forEach(t => t.stop());
+            mjpegStream = null;
+        }
+    }
+
+    function getCanvasBasedMJPEGStream(mjpegUrl) {
+        ensureDrawLoop(mjpegUrl);
+        const stream = m3dCanvas.captureStream(10);
+        console.log('[M3D getStream] New captureStream created, tracks:', stream.getVideoTracks().length);
+        return stream;
     }
 
     // --- 4. EXECUTION FLOW WITH DELAY ---
@@ -235,9 +278,17 @@
 
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async function(constraints) {
+        console.log('[M3D getUserMedia] Called with constraints:', JSON.stringify(constraints));
+        console.log('[M3D getUserMedia] userChoice:', userChoice, 'mjpegStream:', !!mjpegStream, 'drawLoopActive:', drawLoopActive);
         if (constraints && constraints.video) {
             if (!userChoice) userChoice = await showCameraSelectionModal();
-            if (userChoice === 'm3d') return getCanvasBasedMJPEGStream(FRAME_URL);
+            if (userChoice === 'm3d') {
+                console.log('[M3D getUserMedia] Routing to M3D stream');
+                const stream = getCanvasBasedMJPEGStream(FRAME_URL);
+                console.log('[M3D getUserMedia] Returning stream, active:', stream.active,
+                    'tracks:', stream.getVideoTracks().map(t => ({readyState: t.readyState, muted: t.muted, enabled: t.enabled})));
+                return stream;
+            }
             return originalGetUserMedia(constraints);
         }
         return originalGetUserMedia(constraints);
